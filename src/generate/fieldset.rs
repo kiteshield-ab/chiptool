@@ -87,6 +87,7 @@ pub fn render(opts: &super::Options, ir: &IR, fs: &FieldSet, path: &str) -> Resu
                     let (len, offs_expr) = super::process_array(array);
                     items.extend(quote!(
                         #doc
+                        #[must_use]
                         #[inline(always)]
                         pub const fn #name(&self, n: usize) -> #field_ty{
                             assert!(n < #len);
@@ -105,6 +106,7 @@ pub fn render(opts: &super::Options, ir: &IR, fs: &FieldSet, path: &str) -> Resu
                 } else {
                     items.extend(quote!(
                         #doc
+                        #[must_use]
                         #[inline(always)]
                         pub const fn #name(&self) -> #field_ty{
                             let val = (self.0 >> #off_in_reg) & #mask;
@@ -144,6 +146,7 @@ pub fn render(opts: &super::Options, ir: &IR, fs: &FieldSet, path: &str) -> Resu
                     let (len, offs_expr) = super::process_array(array);
                     items.extend(quote!(
                         #doc
+                        #[must_use]
                         #[inline(always)]
                         pub const fn #name(&self, n: usize) -> #field_ty{
                             assert!(n < #len);
@@ -163,6 +166,7 @@ pub fn render(opts: &super::Options, ir: &IR, fs: &FieldSet, path: &str) -> Resu
                 } else {
                     items.extend(quote!(
                         #doc
+                        #[must_use]
                         #[inline(always)]
                         pub const fn #name(&self) -> #field_ty{
                             let mut val = 0;
