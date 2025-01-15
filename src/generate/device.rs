@@ -25,6 +25,9 @@ pub fn render(opts: &super::Options, ir: &IR, d: &Device, path: &str) -> Result<
     let mut peripherals = TokenStream::new();
     let mut vectors = TokenStream::new();
     let mut names = vec![];
+    let mut names_instances = vec![];
+    let mut instances = TokenStream::new();
+    let mut instance_fields = TokenStream::new();
 
     let mut pos = 0;
     for i in sorted(&d.interrupts, |i| i.value) {
@@ -57,7 +60,11 @@ pub fn render(opts: &super::Options, ir: &IR, d: &Device, path: &str) -> Result<
     }
 
     for p in sorted(&d.peripherals, |p| p.base_address) {
-        let name = Ident::new(&p.name, span);
+        names_instances.push((
+            Ident::new(&p.name.to_sanitized_pascal_case(), span),
+            Ident::new(&p.name.to_sanitized_snake_case(), span),
+        ));
+        let name = Ident::new(&p.name.to_sanitized_pascal_case(), span);
         let address = util::hex_usize(p.base_address);
         let doc = util::doc(&p.description);
 
@@ -67,7 +74,28 @@ pub fn render(opts: &super::Options, ir: &IR, d: &Device, path: &str) -> Result<
 
             peripherals.extend(quote! {
                 #doc
-                pub const #name: #path = unsafe { #path::from_ptr(#address as _) };
+                pub struct #name {
+                    _p: (),
+                }
+
+                impl #name {
+                    /// Conjure the register from thin air.
+                    ///
+                    /// Safety: It's up to the user to not alias memory or make data races.
+                    pub const unsafe fn conjure() -> Self {
+                        Self { _p: () }
+                    }
+                }
+
+                impl core::ops::Deref for #name {
+                    type Target = #path;
+
+                    fn deref(&self) -> &Self::Target {
+                        const INST: #path = unsafe { #path::from_ptr(#address as *mut ()) };
+
+                        &INST
+                    }
+                }
             });
         } else {
             peripherals.extend(quote! {
@@ -76,6 +104,16 @@ pub fn render(opts: &super::Options, ir: &IR, d: &Device, path: &str) -> Result<
             });
         }
     }
+
+    for (instance_pc, instance_sc) in names_instances {
+        instance_fields.extend(quote!(
+            pub #instance_sc: #instance_pc,
+        ));
+        instances.extend(quote!(
+            #instance_sc: #instance_pc { _p: () },
+        ));
+    }
+
     let n = util::unsuffixed(pos as u64);
 
     let defmt = opts.defmt_feature.as_ref().map(|defmt_feature| {
@@ -114,6 +152,21 @@ pub fn render(opts: &super::Options, ir: &IR, d: &Device, path: &str) -> Result<
             pub static __INTERRUPTS: [Vector; #n] = [
                 #vectors
             ];
+        }
+
+        pub struct Instances {
+            #instance_fields
+        }
+
+        impl Instances {
+            /// Conjure all peripherals.
+            ///
+            /// Safety: Calling this more than once will alias the peripheral.
+            pub const unsafe fn conjure() -> Self {
+                Instances {
+                    #instances
+                }
+            }
         }
 
         #peripherals
